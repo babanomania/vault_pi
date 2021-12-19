@@ -1,0 +1,42 @@
+---
+- name: Check if backup_sync directory exists
+  stat:
+    path: "{{ base_path }}/backup_sync"
+  register: backup_sync
+
+- name: Create backup directory
+  become: true
+  become_user: "{{ ansible_user }}"
+  file:
+    path: "{{ base_path }}/backup_sync"
+    state: directory
+  when: backup_sync.stat.exists == False
+
+- name: Ensure backup script is present
+  become: true
+  become_user: "{{ ansible_user }}"
+  ansible.builtin.template:
+    src: data/backup_sync/do_backup.sh.j2
+    dest: "{{ base_path }}/backup_sync/do_backup.sh"
+    mode: u=rw,g=rx,o=rx
+  notify: "schedule backup"
+
+- name: Ensure sync script is present
+  become: true
+  become_user: "{{ ansible_user }}"
+  ansible.builtin.template:
+    src: data/backup_sync/do_sync.sh.j2
+    dest: "{{ base_path }}/backup_sync/do_sync.sh"
+    mode: u=rw,g=rx,o=rx
+  notify: "schedule sync"
+
+- name: Ensure alert script is present
+  become: true
+  become_user: "{{ ansible_user }}"
+  ansible.builtin.template:
+    src: data/backup_sync/do_alert.sh.j2
+    dest: "{{ base_path }}/backup_sync/do_alert.sh"
+    mode: u=rw,g=rx,o=rx
+  notify:
+    - "schedule backup"
+    - "schedule sync"

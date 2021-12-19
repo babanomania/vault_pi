@@ -1,0 +1,12 @@
+---
+- name: Check if /tmp/openssl.conf file exists
+  stat:
+    path: /tmp/openssl.conf
+  register: tmp_openssl
+
+- name: Remove /tmp/openssl.conf file
+  command: /tmp/openssl.conf
+  when: tmp_openssl.stat.exists == True
+
+- name: Cleanup /tmp directory
+  command: rm -rf /tmp/*

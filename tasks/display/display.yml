@@ -1,0 +1,61 @@
+---
+- name: Check if display-lib directory exists
+  stat:
+    path: "{{ base_path }}/display-lib"
+  register: display_lib
+
+- name: Ensure display-lib directory exists
+  become: true
+  become_user: "{{ ansible_user }}"
+  file:
+    path: "{{ base_path }}/display-lib"
+    state: directory
+  when: display_lib.stat.exists == False
+  notify: "waveshare init"
+
+- name: Ensure show-label project is copied
+  become: true
+  become_user: "{{ ansible_user }}"
+  ansible.builtin.copy:
+    src: data/show-label
+    dest: "{{ base_path }}/display-lib"
+    mode: u=rw,g=rx,o=rx
+
+- name: Ensure do_clean is copied
+  become: true
+  become_user: "{{ ansible_user }}"
+  ansible.builtin.template:
+    src: data/show-label/do_clean.sh.j2
+    dest: "{{ base_path }}/display-lib/show-label/do_clean.sh"
+    mode: u=rw,g=rx,o=rx
+
+- name: Ensure do_refresh is copied
+  become: true
+  become_user: "{{ ansible_user }}"
+  ansible.builtin.template:
+    src: data/show-label/do_refresh.sh.j2
+    dest: "{{ base_path }}/display-lib/show-label/do_refresh.sh"
+    mode: u=rw,g=rx,o=rx
+
+- name: Remove template files
+  ansible.builtin.file:
+    path:
+      - "{{ base_path }}/display-lib/show-label/do_clean.sh.j2"
+      - "{{ base_path }}/display-lib/show-label/do_refresh.sh.j2"
+    state: absent
+
+- name: Ensure a display-refresh job runs every hour
+  become: true
+  become_user: "{{ ansible_user }}"
+  ansible.builtin.cron:
+    name: "refresh display"
+    minute: "0"
+    job: "sudo sh {{ base_path }}/display-lib/show-label/do_refresh.sh > /dev/null 2>&1"
+
+- name: Ensure a clear display on reboot
+  become: true
+  become_user: "{{ ansible_user }}"
+  ansible.builtin.cron:
+    name: "reset display"
+    job: "sudo sh {{ base_path }}/display-lib/show-label/do_clean.sh > /dev/null 2>&1"
+    special_time: reboot

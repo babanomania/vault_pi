@@ -1,0 +1,3 @@
+---
+- name: Enable SPI
+  shell: "raspi-config nonint do_spi 0"

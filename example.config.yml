@@ -1,0 +1,19 @@
+---
+
+# base location for all application setup
+base_path: /home/pi
+
+# borgbackup configuration
+borg_pass: notarealpass
+borg_restore: False    
+
+# rclone configuration
+rclone_drive_token: {"access_token":"XXXX","token_type":"Bearer","refresh_token":"YYYY,"expiry":"ZZZZ"}
+rclone_restore: False
+
+# notification configuration
+telegram_chatid: 1234
+telegram_token: 1111:AAAA
+
+# Vaultwarden configuration
+cert_detail: /C=IN/ST=West Bengal/L=Kolkata/O=Home, Inc./OU=Vaultwarden/CN=VaultPI Vaultwarden

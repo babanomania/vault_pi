@@ -1,0 +1,8 @@
+#!/bin/sh
+cd {{ base_path }}/backup_sync
+. ~/.profile
+
+rclone -v sync $BORG_REPOSITORY remote:borgbackups
+
+cd {{ base_path }}/backup_sync
+sh do_alert.sh "sync complete"

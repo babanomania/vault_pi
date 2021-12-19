@@ -1,0 +1,21 @@
+---
+- name: Tear down existing containers services
+  community.docker.docker_compose:
+    project_src: "{{ base_path }}/containers"
+    state: absent
+  listen: docker restart
+
+- name: Create and start containers services
+  community.docker.docker_compose:
+    project_src: "{{ base_path }}/containers"
+  listen: docker restart
+
+- name: Run `docker-compose up` for containers
+  community.docker.docker_compose:
+    project_src: "{{ base_path }}/containers"
+    build: no
+  listen: docker restart
+
+- name: Remove generate-certificate.sh
+  command: "rm {{ base_path }}/generate-certificate.sh"
+  listen: remove generate-certificate
