@@ -8,7 +8,8 @@ borg_pass: notarealpass
 borg_restore: False    
 
 # rclone configuration
-rclone_drive_token: {"access_token":"XXXX","token_type":"Bearer","refresh_token":"YYYY,"expiry":"ZZZZ"}
+rclone_type: dropbox
+rclone_token: {"access_token":"XXXX","token_type":"Bearer","refresh_token":"YYYY,"expiry":"ZZZZ"}
 rclone_restore: False
 
 # notification configuration

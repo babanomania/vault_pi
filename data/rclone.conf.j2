@@ -1,7 +1,3 @@
 [remote]
-type = drive
-scope = drive
-root_folder_id = 
-token = {{ rclone_drive_token | regex_replace('\'','"') }}
-team_drive = 
-
+type = {{ rclone_type }}
+token = {{ rclone_token | regex_replace('\'','"') }}
