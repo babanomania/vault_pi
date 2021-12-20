@@ -1,4 +1,51 @@
-## Setup
+# Vault PI
+
+This is an ansible-playbook to setup an raspberry-pi with an vaultwarden server running with automatic backup and restore. Below are the features.
+
+### Server hardening
+
+- Change the password of the pi user
+- Ensure Root cannot login via ssh
+- Disable password based login
+- Install & enable ufw and fail2ban
+- Set default and ssh firewall rules
+
+### Backups
+
+- Weekly backups of the vaultwarden data via borgbackups
+- Weekly syncing of backups to dropbox
+- Ability to restore backups from dropbox
+- Telegram updates on backup and sync job completion
+
+### Vaultwarden
+
+- Setup vaultwarden via docker containers
+- Setup SSL access via nginx
+- Setup nginx certifictes
+
+### E-Ink Display (optional)
+
+- Setup waveshare e-ink driver
+- Setup hourly job to update the uptime on the display
+- Render the bitwarden logo on display
+
+## Prerequisites
+
+The following software packages have to be installed on your local machine and the Raspberry Pi.
+
+### On Local System
+
+- [Python 3](https://www.python.org/downloads/)
+- [Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html)
+- [Setup SSH key](https://www.makeuseof.com/ssh-keygen-mac/)
+
+### On RaspberryPi
+
+- [Raspberry Pi OS](https://www.raspberrypi.com/software/)
+- [Python 3](https://www.python.org/downloads/)
+- [Password-less SSH from local system](https://www.tecmint.com/ssh-passwordless-login-using-ssh-keygen-in-5-easy-steps/)
+
+## Steps
 
 1. [Install Ansible](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html). The easiest way (especially on Pi or a Debian system) is via Pip:
 
