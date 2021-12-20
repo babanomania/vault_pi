@@ -10,3 +10,7 @@
 
 - name: Cleanup /tmp directory
   command: rm -rf /tmp/*
+
+
+- name: Cleanup ~/.ansible/tmp directory
+  command: rm -rf /home/{{ ansible_user }}/.ansible/tmp

@@ -6,7 +6,7 @@
     name: "take backup"
     minute: "0"
     hour: "23"
-    weekday: "6"
+    weekday: "5"
     job: "sudo sh {{ base_path }}/backup_sync/do_backup.sh > /dev/null 2>&1"
   listen: "schedule backup"
 

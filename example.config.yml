@@ -1,20 +1,26 @@
 ---
 
+# How to create encrypted passwords for the user module 
+# https://docs.ansible.com/ansible/latest/reference_appendices/faq.html#how-do-i-generate-encrypted-passwords-for-the-user-module
+# The custom password for the pi user is in this example raspberry
+pi_custom_password: $6$c04cOXDbcDZ$fobZpDfUp1gOfICS9B5MNmzr9BnNL8gzjPBZnfoYLG/VCYSXFChljrMgczA9WI.TdNXIHtSCVKEJ36suDK1s4/
+
 # base location for all application setup
 base_path: /home/pi
 
 # borgbackup configuration
 borg_pass: notarealpass
-borg_restore: False    
+borg_restore: False 
 
 # rclone configuration
+# Use this link to create the dropbox token https://rclone.org/dropbox/
 rclone_type: dropbox
 rclone_token: {"access_token":"XXXX","token_type":"Bearer","refresh_token":"YYYY,"expiry":"ZZZZ"}
 rclone_restore: False
 
-# notification configuration
+# telegram configuration
 telegram_chatid: 1234
 telegram_token: 1111:AAAA
 
-# Vaultwarden configuration
+# certificate configuration
 cert_detail: /C=IN/ST=West Bengal/L=Kolkata/O=Home, Inc./OU=Vaultwarden/CN=VaultPI Vaultwarden

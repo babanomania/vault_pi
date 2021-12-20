@@ -1,0 +1,7 @@
+---
+- name: Change the password of the user pi
+  user:
+    name: "{{ ansible_user }}"
+    password: "{{ pi_custom_password }}"
+    state: present
+    update_password: always

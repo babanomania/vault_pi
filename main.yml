@@ -5,14 +5,24 @@
 
   vars_files:
     - config.yml
+    - vars/log2ram.yml
 
   pre_tasks:
     - name: pre tasks
       ansible.builtin.import_tasks: tasks/pre.yml
 
   tasks:
-    - name: Sample Task
-      ansible.builtin.command: "hostname"
+    - name:  Setup User Security
+      ansible.builtin.import_tasks: tasks/security/users.yml
+
+    - name: Setup SSH Security
+      ansible.builtin.import_tasks: tasks/security/ssh.yml
+
+    - name: Setup Firewall
+      ansible.builtin.import_tasks: tasks/security/firewall.yml
+
+    - name: Setup log2ram
+      ansible.builtin.import_tasks: tasks/security/firewall.yml
 
 - name: Backup Management
   hosts: vault_pi
