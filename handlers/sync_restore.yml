@@ -1,4 +1,17 @@
 ---
+- name: Check if /root/.config/rclone directory exists
+  stat:
+    path: "/root/.config/rclone"
+  register: rclone_conf
+  listen: "rclone sync"
+
+- name: Create /root/.config/rclone directory
+  file:
+    path: "/root/.config/rclone"
+    state: directory
+  listen: "rclone sync"
+  when: rclone_conf.stat.exists == False
+
 - name: Ensure rclone is configured
   ansible.builtin.template:
     src: data/rclone.conf.j2
