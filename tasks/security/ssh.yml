@@ -12,7 +12,7 @@
   lineinfile:
     path: /etc/ssh/sshd_config
     insertafter: "EOF"
-    line: "DenyUsers pi root"
+    line: "DenyUsers root"
   when: not deny_root.found
 
 - name: Disable ChallengeResponseAuthentication

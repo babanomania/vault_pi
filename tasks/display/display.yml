@@ -16,15 +16,16 @@
 - name: Ensure show-label project is copied
   become: true
   become_user: "{{ ansible_user }}"
-  ansible.builtin.copy:
+  synchronize:
     src: data/show-label
     dest: "{{ base_path }}/display-lib"
-    mode: u=rw,g=rx,o=rx
+    rsync_opts:
+      - "--exclude=.j2"
 
 - name: Ensure do_clean is copied
   become: true
   become_user: "{{ ansible_user }}"
-  ansible.builtin.template:
+  template:
     src: data/show-label/do_clean.sh.j2
     dest: "{{ base_path }}/display-lib/show-label/do_clean.sh"
     mode: u=rw,g=rx,o=rx
@@ -32,13 +33,13 @@
 - name: Ensure do_refresh is copied
   become: true
   become_user: "{{ ansible_user }}"
-  ansible.builtin.template:
+  template:
     src: data/show-label/do_refresh.sh.j2
     dest: "{{ base_path }}/display-lib/show-label/do_refresh.sh"
     mode: u=rw,g=rx,o=rx
 
 - name: Remove template files
-  ansible.builtin.file:
+  file:
     path:
       - "{{ base_path }}/display-lib/show-label/do_clean.sh.j2"
       - "{{ base_path }}/display-lib/show-label/do_refresh.sh.j2"
@@ -47,7 +48,7 @@
 - name: Ensure a display-refresh job runs every hour
   become: true
   become_user: "{{ ansible_user }}"
-  ansible.builtin.cron:
+  cron:
     name: "refresh display"
     minute: "0"
     job: "sudo sh {{ base_path }}/display-lib/show-label/do_refresh.sh > /dev/null 2>&1"
@@ -55,7 +56,7 @@
 - name: Ensure a clear display on reboot
   become: true
   become_user: "{{ ansible_user }}"
-  ansible.builtin.cron:
+  cron:
     name: "reset display"
     job: "sudo sh {{ base_path }}/display-lib/show-label/do_clean.sh > /dev/null 2>&1"
     special_time: reboot

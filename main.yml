@@ -12,11 +12,14 @@
       ansible.builtin.import_tasks: tasks/pre.yml
 
   handlers:
-    - name: handlers for log2ram 
+    - name: handlers for log2ram
       ansible.builtin.import_tasks: handlers/log2ram_restart.yml
-    
+
   tasks:
-    - name:  Setup User Security
+    - name: Setup log2ram
+      ansible.builtin.import_tasks: tasks/security/log2ram.yml
+
+    - name: Setup User Security
       ansible.builtin.import_tasks: tasks/security/users.yml
 
     - name: Setup SSH Security
@@ -24,9 +27,6 @@
 
     - name: Setup Firewall
       ansible.builtin.import_tasks: tasks/security/firewall.yml
-
-    - name: Setup log2ram
-      ansible.builtin.import_tasks: tasks/security/log2ram.yml
 
 - name: Backup Management
   hosts: vault_pi

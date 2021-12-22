@@ -2,7 +2,7 @@
 - name: Ensure docker-compose.yml for containers is present
   become: true
   become_user: "{{ ansible_user }}"
-  ansible.builtin.copy:
+  synchronize:
     src: data/containers
     dest: "{{ base_path }}"
   notify: docker restart
@@ -13,7 +13,7 @@
   register: certificate
 
 - name: Ensure openssl is at the present
-  ansible.builtin.apt:
+  apt:
     name: openssl
     state: present
   when: certificate.stat.exists == False
@@ -29,7 +29,7 @@
 - name: Copy certificate script
   become: true
   become_user: "{{ ansible_user }}"
-  ansible.builtin.template:
+  template:
     src: data/generate-certificate.sh.j2
     dest: "{{ base_path }}/generate-certificate.sh"
     mode: u=rwx

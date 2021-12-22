@@ -5,7 +5,7 @@
   with_items:
     - ufw
     - fail2ban
-    
+
 - name: Start and enable UFW
   ufw:
     state: enabled
@@ -20,13 +20,25 @@
     policy: allow
     direction: outgoing
 
-- name: Establish ssh firewall rule
+- name: Allow SSH in firewall
   ufw:
-    rule: limit
-    port: ssh
+    rule: allow
+    port: 22
     proto: tcp
 
-- name: Copy jail.local file to Raspberry Pi
+- name: Enable SSH rate limiting
+  ufw:
+    rule: limit
+    port: 22
+    proto: tcp
+
+- name: Allow NGINX in firewall
+  ufw:
+    rule: allow
+    port: 443
+    proto: tcp
+
+- name: Configure fail2ban
   copy:
     src: data/jail.local
     dest: "/etc/fail2ban/"
