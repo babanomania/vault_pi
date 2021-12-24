@@ -1,0 +1,8 @@
+#!/bin/sh
+apt-get update && apt-get upgrade -y 
+rpi-update -y
+apt-get autoremove -y
+apt-get autoclean -y
+
+sh backup_sync/do_alert.sh "os update complete"
+reboot

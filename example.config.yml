@@ -8,6 +8,15 @@ pi_custom_password: $6$c04cOXDbcDZ$fobZpDfUp1gOfICS9B5MNmzr9BnNL8gzjPBZnfoYLG/VC
 # base location for all application setup
 base_path: /home/pi
 
+# flag to enable/disable backup and sync
+ensure_backup: True
+
+# flat to enable/disable automatic updates
+ensure_autoupdate: True
+
+# flat to enable/disable e-ink display
+ensure_display: True
+
 # borgbackup configuration
 borg_pass: notarealpass
 borg_restore: False 

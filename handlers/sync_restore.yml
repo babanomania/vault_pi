@@ -3,49 +3,49 @@
   stat:
     path: "/root/.config/rclone"
   register: rclone_conf
-  listen: "rclone sync"
+  listen: rclone sync
 
 - name: Create /root/.config/rclone directory
   file:
     path: "/root/.config/rclone"
     state: directory
-  listen: "rclone sync"
+  listen: rclone sync
   when: rclone_conf.stat.exists == False
 
 - name: Ensure rclone is configured
-  ansible.builtin.template:
+  template:
     src: data/rclone.conf.j2
     dest: /root/.config/rclone/rclone.conf
     owner: root
     group: root
     mode: u=rw,g=rx,o=rx
-  listen: "rclone sync"
+  listen: rclone sync
 
 - name: Check if backup_sync directory exists
   stat:
-    path: "{{ base_path }}/backup_sync"
+    path: "{{ base_path }}/{{ backup.scripts_path }}"
   register: backup_sync
-  listen: "rclone sync"
+  listen: rclone sync
 
 - name: Create backup directory
   become: true
   become_user: "{{ ansible_user }}"
   file:
-    path: "{{ base_path }}/backup_sync"
+    path: "{{ base_path }}/{{ backup.scripts_path }}"
     state: directory
-  listen: "rclone sync"
+  listen: rclone sync
   when: backup_sync.stat.exists == False
 
 - name: Create borgrepo directory
   become: true
   become_user: "{{ ansible_user }}"
   file:
-    path: "{{ base_path }}/backup_sync/borgrepo"
+    path: "{{ base_path }}/{{ backup.repository }}"
     state: directory
-  listen: "rclone sync"
+  listen: rclone sync
   when: backup_sync.stat.exists == False
 
 - name: Restore from drive
-  command: "sudo rclone sync remote:borgbackups {{ base_path }}/backup_sync/borgrepo"
-  listen: "rclone sync"
+  command: "sudo rclone sync remote:{{ sync.dropbox_path }} {{ base_path }}/{{ backup.repository }}"
+  listen: rclone sync
   when: rclone_restore == True

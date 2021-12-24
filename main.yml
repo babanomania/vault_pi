@@ -9,24 +9,28 @@
 
   pre_tasks:
     - name: pre tasks
-      ansible.builtin.import_tasks: tasks/pre.yml
+      import_tasks: tasks/pre.yml
 
   handlers:
     - name: handlers for log2ram
-      ansible.builtin.import_tasks: handlers/log2ram_restart.yml
+      import_tasks: handlers/log2ram_restart.yml
 
   tasks:
     - name: Setup log2ram
-      ansible.builtin.import_tasks: tasks/security/log2ram.yml
+      import_tasks: tasks/security/log2ram.yml
 
     - name: Setup User Security
-      ansible.builtin.import_tasks: tasks/security/users.yml
+      import_tasks: tasks/security/users.yml
 
     - name: Setup SSH Security
-      ansible.builtin.import_tasks: tasks/security/ssh.yml
+      import_tasks: tasks/security/ssh.yml
 
     - name: Setup Firewall
-      ansible.builtin.import_tasks: tasks/security/firewall.yml
+      import_tasks: tasks/security/firewall.yml
+
+    - name: Setup Auto-Updates
+      import_tasks: tasks/security/autoupdate.yml
+      when: ensure_autoupdate
 
 - name: Backup Management
   hosts: vault_pi
@@ -34,26 +38,30 @@
 
   vars_files:
     - config.yml
+    - vars/backups.yml
 
   handlers:
     - name: Include Sync-Restore Handlers
-      ansible.builtin.import_tasks: handlers/sync_restore.yml
+      import_tasks: handlers/sync_restore.yml
 
     - name: Include Backup-Restore Handlers
-      ansible.builtin.import_tasks: handlers/backup_restore.yml
+      import_tasks: handlers/backup_restore.yml
 
     - name: Include Scheduling Handlers
-      ansible.builtin.import_tasks: handlers/schedule_backups.yml
+      import_tasks: handlers/schedule_backups.yml
 
   tasks:
     - name: Setup Rclone
-      ansible.builtin.import_tasks: tasks/backups/rclone.yml
+      import_tasks: tasks/backups/rclone.yml
+      when: ensure_backup
 
     - name: Setup BorgBackup
-      ansible.builtin.import_tasks: tasks/backups/borg.yml
+      import_tasks: tasks/backups/borg.yml
+      when: ensure_backup
 
     - name: Setup Backups and Sync Scripts
-      ansible.builtin.import_tasks: tasks/backups/scheduling.yml
+      import_tasks: tasks/backups/scheduling.yml
+      when: ensure_backup
 
 - name: E-Ink Display Management
   hosts: vault_pi
@@ -61,17 +69,20 @@
 
   vars_files:
     - config.yml
+    - vars/display.yml
 
   handlers:
     - name: Include Waveshare Driver Handlers
-      ansible.builtin.import_tasks: handlers/waveshare_driver.yml
+      import_tasks: handlers/waveshare_driver.yml
 
   tasks:
     - name: Setup SPI
-      ansible.builtin.import_tasks: tasks/display/spi.yml
+      import_tasks: tasks/display/spi.yml
+      when: ensure_display
 
     - name: Setup Display Refresh Scripts
-      ansible.builtin.import_tasks: tasks/display/display.yml
+      import_tasks: tasks/display/display.yml
+      when: ensure_display
 
 - name: Container Setup
   hosts: vault_pi
@@ -82,15 +93,15 @@
 
   post_tasks:
     - name: Filesystem Cleanup
-      ansible.builtin.import_tasks: tasks/post.yml
+      import_tasks: tasks/post.yml
 
   handlers:
     - name: Include Docker Handlers
-      ansible.builtin.import_tasks: handlers/docker_restart.yml
+      import_tasks: handlers/docker_restart.yml
 
   tasks:
     - name: Setup Docker
-      ansible.builtin.import_tasks: tasks/containers/docker.yml
+      import_tasks: tasks/containers/docker.yml
 
     - name: Setup Containers
-      ansible.builtin.import_tasks: tasks/containers/containers.yml
+      import_tasks: tasks/containers/containers.yml

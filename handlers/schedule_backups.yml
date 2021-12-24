@@ -1,28 +1,28 @@
 ---
-- name: Ensure a backup job runs every saturday at 23:00
+- name: Ensure a backup job runs {{ backup.schedule.description }}
   become: true
   become_user: "{{ ansible_user }}"
   ansible.builtin.cron:
-    name: "take backup"
-    minute: "0"
-    hour: "23"
-    weekday: "5"
-    job: "sudo sh {{ base_path }}/backup_sync/do_backup.sh > /dev/null 2>&1"
+    name: "take backup {{ backup.schedule.description }}"
+    minute: "{{ backup.schedule.minute }}"
+    hour: "{{ backup.schedule.hour }}"
+    weekday: "{{ backup.schedule.weekday }}"
+    job: "sudo sh {{ base_path }}/{{ backup.scripts_path }}/do_backup.sh > /dev/null 2>&1"
   listen: "schedule backup"
 
-- name: Ensure a sync job runs every sunday at 23:00
+- name: Ensure a sync job runs {{ sync.schedule.description }}
   become: true
   become_user: "{{ ansible_user }}"
   ansible.builtin.cron:
-    name: "sync to drive"
-    minute: "0"
-    hour: "23"
-    weekday: "6"
-    job: "sudo sh {{ base_path }}/backup_sync/do_sync.sh > /dev/null 2>&1"
+    name: "sync to drive {{ sync.schedule.description }}"
+    minute: "{{ sync.schedule.minute }}"
+    hour: "{{ sync.schedule.hour }}"
+    weekday: "{{ sync.schedule.weekday }}"
+    job: "sudo sh {{ base_path }}/{{ backup.scripts_path }}/do_sync.sh > /dev/null 2>&1"
   listen: "schedule sync"
 
 - name: Update Variables in Profile 
-  ansible.builtin.template:
+  template:
     src: data/profile.j2
     dest: "/root/.profile"
     mode: u=rw

@@ -10,7 +10,7 @@
 
 - name: Check if waveshare module repository exists
   stat:
-    path: "{{ base_path }}/display-lib/e-Paper"
+    path: "{{ base_path }}/{{ display.scripts_path }}/{{ display.driver.local_path }}"
   register: waveshare_repo
   listen: "waveshare init"
 
@@ -18,13 +18,13 @@
   become: true
   become_user: "{{ ansible_user }}"
   ansible.builtin.git:
-    repo: https://github.com/waveshare/e-Paper.git
-    dest: "{{ base_path }}/display-lib/e-Paper"
+    repo: "{{ display.driver.git_repo }}"
+    dest: "{{ base_path }}/{{ display.scripts_path }}/{{ display.driver.local_path }}"
   when: waveshare_repo.stat.exists == False
   listen: "waveshare init"
 
 - name: Ensure waveshare module is installed
   pip:
-    name: file://{{ base_path }}/display-lib/e-Paper/RaspberryPi_JetsonNano/python
+    name: file://{{ base_path }}/{{ display.scripts_path }}/{{ display.driver.pip_module }}
   when: waveshare_repo.stat.exists == False
   listen: "waveshare init"

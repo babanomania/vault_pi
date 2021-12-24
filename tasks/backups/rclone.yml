@@ -3,4 +3,4 @@
   ansible.builtin.apt:
     name: rclone
     state: present
-  notify: "rclone sync"
+  notify: rclone sync

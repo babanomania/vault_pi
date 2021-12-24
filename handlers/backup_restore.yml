@@ -1,58 +1,59 @@
 ---
 - name: Check if borg repository exists
   stat:
-    path: "{{ base_path }}/backup_sync/borgrepo"
-  listen: "borg init"
+    path: "{{ base_path }}/{{ backup.repository }}"
+  listen: borg init
   register: borg_repo
 
 - name: Create borg repository directory
   become: true
   become_user: "{{ ansible_user }}"
   file:
-    path: "{{ base_path }}/backup_sync/borgrepo"
+    path: "{{ base_path }}/{{ backup.repository }}"
     state: directory
-  listen: "borg init"
-  when: borg_repo.stat.exists == False 
+  listen: borg init
+  when: borg_repo.stat.exists == False
 
 - name: Ensure borg repository is initalized
   become: true
   become_user: "{{ ansible_user }}"
   expect:
-    command: "sudo borg init -e repokey-blake2 {{ base_path }}/backup_sync/borgrepo"
+    command: "sudo borg init -e repokey-blake2 {{ base_path }}/{{ backup.repository }}"
     responses:
       (.*)passphrase(.*): "{{ borg_pass }}"
       (.*)[yN]: N
-  listen: "borg init"
+  listen: borg init
   when: borg_repo.stat.exists == False and rclone_restore == False and borg_restore == False
 
-- name: Ensure containers directory exists
+- name: Ensure backup source directory exists
   become: true
   become_user: "{{ ansible_user }}"
   file:
-    path: "{{ base_path }}/containers"
+    path: "{{ base_path }}/{{ backup.source }}"
     state: directory
-  listen: "borg restore"
+    recurse: True
+  listen: borg restore
 
 - name: Take Latest Backup from Borg Repository
   become: true
   become_user: "{{ ansible_user }}"
   expect:
-    command: "sudo borg list --last 1 {{ base_path }}/backup_sync/borgrepo/ | tail -1 | awk '{ print $1 }"
+    command: "sudo borg list --last 1 {{ base_path }}/{{ backup.repository }} | tail -1 | awk '{ print $1 }"
     responses:
       (.*)passphrase(.*): "{{ borg_pass }}"
       (.*)[yN]: Y
   register: last_backup
-  listen: "borg restore"
+  listen: borg restore
   when: borg_restore == True
 
 - name: Restore from Borg Repository
   become: true
   become_user: "{{ ansible_user }}"
   expect:
-    chdir: "{{ base_path }}/containers/"
-    command: "sudo borg extract {{ base_path }}/backup_sync/borgrepo/::{{ last_backup.stdout_lines[1].split(' ')[0] }}"
+    chdir: "{{ base_path }}/{{ backup.source }}"
+    command: "sudo borg extract {{ base_path }}/{{ backup.repository }}::{{ last_backup.stdout_lines[1].split(' ')[0] }}"
     responses:
       (.*)passphrase(.*): "{{ borg_pass }}"
       (.*)[yN]: Y
-  listen: "borg restore"
+  listen: borg restore
   when: borg_restore == True

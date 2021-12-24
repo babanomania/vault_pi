@@ -15,7 +15,11 @@ services:
     container_name: nginx
     restart: always
     ports:
-     - 443:443
+      - 443:443
     volumes:
-     - ./nginx-data:/etc/nginx/conf.d
+      - ./nginx-data:/etc/nginx/conf.d
 
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

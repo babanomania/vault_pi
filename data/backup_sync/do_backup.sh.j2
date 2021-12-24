@@ -1,5 +1,5 @@
 #!/bin/sh
-cd {{ base_path }}/backup_sync
+cd {{ base_path }}/{{ backup.scripts_path }}
 . ~/.profile
 
 #Bail if borg is already running, maybe previous run didn't finish
@@ -8,10 +8,11 @@ if pidof -x borg >/dev/null; then
     exit
 fi
 
-cd {{ base_path }}/containers/
+cd {{ base_path }}/{{ backup.source }}/
+cd ..
 borg create -v --stats $BORG_REPOSITORY::'{hostname}-{now:%Y-%m-%d}' vw-data/        
 borg prune -v --list $BORG_REPOSITORY --prefix '{hostname}-' --keep-daily=3 --keep-weekly=4 --keep-monthly=3
 
-cd {{ base_path }}/backup_sync
+cd {{ base_path }}/{{ backup.scripts_path }}
 sh do_alert.sh "backup complete"
 

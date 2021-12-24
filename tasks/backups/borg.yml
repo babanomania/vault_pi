@@ -6,5 +6,5 @@
       - borgmatic
     state: present
   notify:
-    - "borg init"
-    - "borg restore"
+    - borg init
+    - borg restore

@@ -1,0 +1,17 @@
+---
+backup:
+  scripts_path: backup_sync
+  repository: backup_sync/borgrepo
+  source: containers/vw-data
+  schedule:
+    description: every saturday at 23:00
+    minute: 0
+    hour: 23
+    weekday: 5
+sync:
+  dropbox_path: borgbackups
+  schedule:
+    description: every sunday at 23:00
+    minute: 0
+    hour: 23
+    weekday: 6

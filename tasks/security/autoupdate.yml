@@ -1,0 +1,18 @@
+---
+- name: Ensure autoupdate script is present
+  become: true
+  become_user: "{{ ansible_user }}"
+  template:
+    src: data/do_autoupdate.sh.j2
+    dest: "{{ base_path }}/do_autoupdate.sh"
+    mode: u=rw,g=rx,o=rx
+
+- name: Ensure autoupdate job runs every sunday at 01:00
+  become: true
+  become_user: "{{ ansible_user }}"
+  ansible.builtin.cron:
+    name: "autoupdate system"
+    minute: "0"
+    hour: "01"
+    weekday: "6"
+    job: "sudo sh {{ base_path }}/do_autoupdate.sh > /dev/null 2>&1"
