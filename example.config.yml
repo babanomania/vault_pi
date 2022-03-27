@@ -11,12 +11,15 @@ base_path: /home/pi
 # flag to enable/disable backup and sync
 ensure_backup: True
 
-# flag to enable/disable automatic updates
+# flat to enable/disable automatic updates
 ensure_autoupdate: True
 
-# pihole configuration
-pihole_tz: Europe/London
-pihole_password: pihole
+# flat to enable/disable e-ink display
+ensure_display: True
+
+# borgbackup configuration
+borg_pass: notarealpass
+borg_restore: False 
 
 # rclone configuration
 # Use this link to create the dropbox token https://rclone.org/dropbox/

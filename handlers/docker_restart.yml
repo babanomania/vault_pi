@@ -15,3 +15,7 @@
     project_src: "{{ base_path }}/containers"
     build: no
   listen: docker restart
+
+- name: Remove generate-certificate.sh
+  command: "rm {{ base_path }}/generate-certificate.sh"
+  listen: remove generate-certificate

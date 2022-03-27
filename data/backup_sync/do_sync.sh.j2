@@ -2,7 +2,7 @@
 cd {{ base_path }}/{{ backup.scripts_path }}
 . ~/.profile
 
-rclone -v sync $BACKUP_REPOSITORY remote:{{ sync.dropbox_path }}
+rclone -v sync $BORG_REPOSITORY remote:{{ sync.dropbox_path }}
 
 cd {{ base_path }}/{{ backup.scripts_path }}
 sh do_alert.sh "sync complete"

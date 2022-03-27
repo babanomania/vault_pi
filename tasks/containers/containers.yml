@@ -6,3 +6,53 @@
     src: data/containers
     dest: "{{ base_path }}"
   notify: docker restart
+
+- name: Check if nginx certificate exists
+  stat:
+    path: "{{ base_path }}/containers/nginx-data/certs/nginx-selfsigned.key"
+  register: certificate
+
+- name: Ensure openssl is at the present
+  apt:
+    name: openssl
+    state: present
+  when: certificate.stat.exists == False
+
+- name: Ensure nginx certificate directory exists
+  become: true
+  become_user: "{{ ansible_user }}"
+  file:
+    path: "{{ base_path }}/containers/nginx-data/certs"
+    state: directory
+  when: certificate.stat.exists == False
+
+- name: Copy certificate script
+  become: true
+  become_user: "{{ ansible_user }}"
+  template:
+    src: data/generate-certificate.sh.j2
+    dest: "{{ base_path }}/generate-certificate.sh"
+    mode: u=rwx
+  notify: remove generate-certificate
+  when: certificate.stat.exists == False
+
+- name: Generate nginx certificate
+  become: true
+  become_user: "{{ ansible_user }}"
+  command: "sh {{ base_path  }}/generate-certificate.sh"
+  when: certificate.stat.exists == False
+#
+# - name: Generate nginx certificate
+#   become: true
+#   become_user: "{{ ansible_user }}"
+#   command: |
+#     openssl
+#       req -x509 -nodes -days 3650
+#       -newkey rsa:2048
+#       -keyout {{base_path}}/containers/nginx-data/certs/nginx-selfsigned.key
+#       -out {{base_path}}/containers/nginx-data/certs/nginx-selfsigned.crt
+#       -reqexts SAN
+#       -extensions SAN
+#       -config <(cat /usr/lib/ssl/openssl.cnf <(printf '[SAN]\nsubjectAltName=DNS:{{ ansible_nodename }},IP:{{ ansible_default_ipv4.address }}\nbasicConstraints=CA:TRUE,pathlen:0'))
+#       -subj "{{ cert_detail }}"
+#   when: certificate.stat.exists == False
