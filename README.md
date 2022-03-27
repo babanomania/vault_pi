@@ -1,4 +1,4 @@
-# Vault PI
+# The VaultWarden Ansible Playbook for RaspberryPI
 
 This is an ansible-playbook to setup an raspberry-pi with an vaultwarden server running with automatic backup and restore. Below are the features.
 
