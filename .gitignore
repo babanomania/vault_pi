@@ -1,3 +1,4 @@
 config.yml
 inventory.ini
 data/containers/nginx-data/certs
+.DS_Store
