@@ -29,5 +29,7 @@ fi
 export TELEGRAM_CHATID={{ telegram_chatid }}
 export TELEGRAM_TOKEN={{ telegram_token }}
 
-export BORG_PASSPHRASE='{{ borg_pass }}'
-export BORG_REPOSITORY={{ base_path }}/{{ backup.repository }}
+export BACKUP_REPOSITORY={{ base_path }}/{{ backup.source }}
+
+export TIMEZONE={{ pihole_tz }}
+export PIHOLE_PASSWORD={{ pihole_password }}

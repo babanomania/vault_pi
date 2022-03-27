@@ -1,6 +1,6 @@
 ---
 - name: Server Hardening
-  hosts: vault_pi
+  hosts: dnspi
   become: yes
 
   vars_files:
@@ -33,7 +33,7 @@
       when: ensure_autoupdate
 
 - name: Backup Management
-  hosts: vault_pi
+  hosts: dnspi
   become: yes
 
   vars_files:
@@ -44,9 +44,6 @@
     - name: Include Sync-Restore Handlers
       import_tasks: handlers/sync_restore.yml
 
-    - name: Include Backup-Restore Handlers
-      import_tasks: handlers/backup_restore.yml
-
     - name: Include Scheduling Handlers
       import_tasks: handlers/schedule_backups.yml
 
@@ -55,37 +52,12 @@
       import_tasks: tasks/backups/rclone.yml
       when: ensure_backup
 
-    - name: Setup BorgBackup
-      import_tasks: tasks/backups/borg.yml
-      when: ensure_backup
-
     - name: Setup Backups and Sync Scripts
       import_tasks: tasks/backups/scheduling.yml
       when: ensure_backup
 
-- name: E-Ink Display Management
-  hosts: vault_pi
-  become: yes
-
-  vars_files:
-    - config.yml
-    - vars/display.yml
-
-  handlers:
-    - name: Include Waveshare Driver Handlers
-      import_tasks: handlers/waveshare_driver.yml
-
-  tasks:
-    - name: Setup SPI
-      import_tasks: tasks/display/spi.yml
-      when: ensure_display
-
-    - name: Setup Display Refresh Scripts
-      import_tasks: tasks/display/display.yml
-      when: ensure_display
-
 - name: Container Setup
-  hosts: vault_pi
+  hosts: dnspi
   become: yes
 
   vars_files:

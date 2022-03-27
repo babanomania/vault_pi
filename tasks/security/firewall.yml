@@ -32,12 +32,36 @@
     port: 22
     proto: tcp
 
-- name: Allow NGINX in firewall
+- name: Allow grafana in firewall
   ufw:
     rule: allow
-    port: 443
+    port: 3001
+    proto: tcp 
+
+- name: Allow pihole ui in firewall
+  ufw:
+    rule: allow
+    port: 80
     proto: tcp
 
+- name: Allow dns tcp queries in firewall
+  ufw:
+    rule: allow
+    port: 53,67
+    proto: tcp
+
+- name: Allow dns udp queries in firewall
+  ufw:
+    rule: allow
+    port: 53,67
+    proto: udp
+
+- name: Allow dns queries for IPv6 in firewall
+  ufw:
+    rule: allow
+    port: 546:547
+    proto: udp       
+    
 - name: Configure fail2ban
   copy:
     src: data/jail.local

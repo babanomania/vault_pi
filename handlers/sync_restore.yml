@@ -21,6 +21,21 @@
     mode: u=rw,g=rx,o=rx
   listen: rclone sync
 
+- name: Check if backup directory exists
+  stat:
+    path: "{{ base_path }}/{{ backup.source }}"
+  register: backup_dir
+  listen: rclone sync
+
+- name: Create backup directory
+  become: true
+  become_user: "{{ ansible_user }}"
+  file:
+    path: "{{ base_path }}/{{ backup.source }}"
+    state: directory
+  listen: rclone sync
+  when: backup_dir.stat.exists == False
+
 - name: Check if backup_sync directory exists
   stat:
     path: "{{ base_path }}/{{ backup.scripts_path }}"
@@ -32,15 +47,6 @@
   become_user: "{{ ansible_user }}"
   file:
     path: "{{ base_path }}/{{ backup.scripts_path }}"
-    state: directory
-  listen: rclone sync
-  when: backup_sync.stat.exists == False
-
-- name: Create borgrepo directory
-  become: true
-  become_user: "{{ ansible_user }}"
-  file:
-    path: "{{ base_path }}/{{ backup.repository }}"
     state: directory
   listen: rclone sync
   when: backup_sync.stat.exists == False

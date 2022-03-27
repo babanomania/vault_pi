@@ -1,6 +1,6 @@
-# Vault PI
+# DNS PI
 
-This is an ansible-playbook to setup an raspberry-pi with an vaultwarden server running with automatic backup and restore. Below are the features.
+This is an ansible-playbook to setup an raspberry-pi with an pihole running with automatic backup and restore. Below are the features.
 
 ### Server hardening
 
@@ -10,24 +10,16 @@ This is an ansible-playbook to setup an raspberry-pi with an vaultwarden server 
 - Install & enable ufw and fail2ban
 - Set default and ssh firewall rules
 
+### Pihole
+
+- Setup pihole via docker containers
+
 ### Backups
 
-- Weekly backups of the vaultwarden data via borgbackups
+- Weekly backups of the pihole teleporter data
 - Weekly syncing of backups to dropbox
 - Ability to restore backups from dropbox
 - Telegram updates on backup and sync job completion
-
-### Vaultwarden
-
-- Setup vaultwarden via docker containers
-- Setup SSL access via nginx
-- Setup nginx certifictes
-
-### E-Ink Display (optional)
-
-- Setup waveshare e-ink driver
-- Setup hourly job to update the uptime on the display
-- Render the bitwarden logo on display
 
 ## Prerequisites
 
