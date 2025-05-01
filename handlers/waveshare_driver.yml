@@ -25,6 +25,8 @@
 
 - name: Ensure waveshare module is installed
   pip:
-    name: file://{{ base_path }}/{{ display.scripts_path }}/{{ display.driver.pip_module }}
+    name: "{{ display.driver.pip_module }}"
+    state: present
+    extra_args: --break-system-packages
   when: waveshare_repo.stat.exists == False
   listen: "waveshare init"

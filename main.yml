@@ -90,6 +90,7 @@
 
   vars_files:
     - config.yml
+    - vars/docker.yml
 
   post_tasks:
     - name: Filesystem Cleanup
