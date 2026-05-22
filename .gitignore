@@ -1,4 +1,6 @@
 config.yml
 inventory.ini
 data/containers/nginx-data/certs
+ca.crt
+*.retry
 .DS_Store

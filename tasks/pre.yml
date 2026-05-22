@@ -1,4 +1,19 @@
 ---
+# Pi OS Desktop ships with packagekit + unattended-upgrades. Both race
+# Ansible for the dpkg lock, and on a Pi Zero 2W the contention pegs the
+# SD card (load avg > 10, apt update wedges for 15+ minutes). Mask both
+# before anything else touches apt. They can be re-enabled by removing
+# the systemd masks if the GUI updater is wanted.
+- name: Mask packagekit (prevents racing apt during playbook runs)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    masked: true
+  loop:
+    - packagekit.service
+    - packagekit-offline-update.service
+  failed_when: false   # service may not be installed at all
+
 - name: Ensure apt cache is up to date.
   ansible.builtin.apt:
     update_cache: true
@@ -13,3 +28,32 @@
   ansible.builtin.apt:
     name: python3-pexpect
     state: present
+
+# Pi Zero 2W has only 512 MB RAM. Heavy apt installs + docker image pulls
+# regularly OOM-lock the kernel without swap. dphys-swapfile gives us a
+# managed swap partition. 1 GB is enough headroom for the whole playbook.
+- name: Install dphys-swapfile
+  ansible.builtin.apt:
+    name: dphys-swapfile
+    state: present
+
+- name: Configure dphys-swapfile size (1024 MB)
+  ansible.builtin.lineinfile:
+    path: /etc/dphys-swapfile
+    regexp: '^#?CONF_SWAPSIZE='
+    line: 'CONF_SWAPSIZE=1024'
+  register: swap_cfg
+
+- name: Configure dphys-swapfile max size cap
+  ansible.builtin.lineinfile:
+    path: /etc/dphys-swapfile
+    regexp: '^#?CONF_MAXSWAP='
+    line: 'CONF_MAXSWAP=2048'
+  register: swap_max
+
+- name: Restart dphys-swapfile if config changed
+  ansible.builtin.shell: |
+    /sbin/dphys-swapfile swapoff || true
+    /sbin/dphys-swapfile setup
+    /sbin/dphys-swapfile swapon
+  when: swap_cfg is changed or swap_max is changed

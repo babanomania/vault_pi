@@ -9,7 +9,7 @@ backup:
     hour: 23
     weekday: 5
 sync:
-  dropbox_path: borgbackups
+  dropbox_path: vaultwarden_backups
   schedule:
     description: every sunday at 23:00
     minute: 0

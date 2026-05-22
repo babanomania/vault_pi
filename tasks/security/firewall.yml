@@ -2,24 +2,13 @@
 - name: Install required packages
   apt:
     name: "{{ item }}"
+    state: present
   with_items:
     - ufw
     - fail2ban
 
-- name: Start and enable UFW
-  ufw:
-    state: enabled
-
-- name: Establish default incoming firewall rule
-  ufw:
-    policy: deny
-    direction: incoming
-
-- name: Establish default outgoing firewall rule
-  ufw:
-    policy: allow
-    direction: outgoing
-
+# Define rules BEFORE enabling UFW so we never end up briefly in
+# default-deny without an SSH allow.
 - name: Allow SSH in firewall
   ufw:
     rule: allow
@@ -32,11 +21,31 @@
     port: 22
     proto: tcp
 
-- name: Allow NGINX in firewall
+- name: Allow NGINX HTTP (redirect to HTTPS) in firewall
+  ufw:
+    rule: allow
+    port: 80
+    proto: tcp
+
+- name: Allow NGINX HTTPS in firewall
   ufw:
     rule: allow
     port: 443
     proto: tcp
+
+- name: Establish default incoming firewall rule
+  ufw:
+    policy: deny
+    direction: incoming
+
+- name: Establish default outgoing firewall rule
+  ufw:
+    policy: allow
+    direction: outgoing
+
+- name: Start and enable UFW
+  ufw:
+    state: enabled
 
 - name: Configure fail2ban
   copy:

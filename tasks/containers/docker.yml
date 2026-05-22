@@ -5,17 +5,61 @@
   failed_when: false
   changed_when: false
 
-- name: Download Docker install script
-  get_url:
-    url: https://get.docker.com/
-    dest: /tmp/get-docker.sh
+# We previously used get.docker.com which installs an opinionated bundle
+# including docker-ce-rootless-extras and docker-model-plugin. Those drag in
+# extra .deb downloads which intermittently fail on flaky links. We only need
+# docker-ce + the engine + the cli. The compose plugin is fetched separately
+# from GitHub releases below.
+- name: Ensure prerequisites for Docker repo
+  apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: docker_check.rc != 0
+
+- name: Ensure /etc/apt/keyrings exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
     mode: '0755'
   when: docker_check.rc != 0
 
-- name: Run Docker install script
-  command: /tmp/get-docker.sh
-  environment:
-    CHANNEL: stable
+- name: Download Docker apt signing key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/debian/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+    force: false
+  when: docker_check.rc != 0
+
+- name: Add Docker apt repository
+  copy:
+    content: "deb [arch={{ ansible_architecture | replace('aarch64','arm64') }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_facts['distribution_release'] }} stable\n"
+    dest: /etc/apt/sources.list.d/docker.list
+    mode: '0644'
+  register: docker_repo
+  when: docker_check.rc != 0
+
+- name: Refresh apt cache after adding Docker repo
+  apt:
+    update_cache: true
+  when: docker_check.rc != 0 and docker_repo is changed
+
+- name: Install Docker engine + CLI + containerd (core only, retried)
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: present
+  register: docker_install
+  retries: 3
+  delay: 15
+  until: docker_install is succeeded
   when: docker_check.rc != 0
 
 - name: Ensure Docker service is enabled and started
@@ -35,6 +79,11 @@
     url: "https://github.com/docker/compose/releases/download/v{{ docker_compose_version }}/docker-compose-linux-{{ docker_compose_arch }}"
     dest: "{{ plugin_path }}"
     mode: '0755'
+    timeout: 300
+  register: compose_dl
+  retries: 5
+  delay: 15
+  until: compose_dl is succeeded
 
 - name: Ensure user is added to docker group
   user:

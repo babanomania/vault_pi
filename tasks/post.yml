@@ -1,20 +1,18 @@
 ---
-- name: Check if /tmp/openssl.conf file exists
-  stat:
-    path: /tmp/openssl.conf
-  register: tmp_openssl
+- name: Remove temporary openssl configs
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /tmp/openssl.cnf
+    - /tmp/openssl.conf
 
-- name: Remove /tmp/openssl.conf file
-  command: /tmp/openssl.conf
-  when: tmp_openssl.stat.exists == True
+- name: Remove ansible tmp dir for user
+  file:
+    path: "/home/{{ ansible_user }}/.ansible/tmp"
+    state: absent
 
-- name: Cleanup /tmp directory
-  command: rm -rf /tmp/*
-
-- name: Cleanup ~/.ansible/tmp directory
-  command: rm -rf /home/{{ ansible_user }}/.ansible/tmp
-
-- name: Reboot System
+- name: Reboot system
   shell: "sleep 5 && reboot"
   async: 1
   poll: 0
@@ -23,6 +21,5 @@
   wait_for_connection:
     connect_timeout: 20
     sleep: 5
-    delay: 5
-    timeout: 300
-    
+    delay: 15
+    timeout: 600

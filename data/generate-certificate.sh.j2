@@ -1,14 +1,111 @@
-#!/bin/sh
+#!/usr/bin/env bash
+#
+# Generate an iOS-acceptable TLS chain for Vaultwarden.
+#
+# Produces a self-signed Root CA (long-lived) and a leaf server certificate
+# signed by that CA. Apple platforms (iOS 13+, macOS 10.15+) enforce:
+#   * leaf validity <= 398 days
+#   * SAN extension matching the hostname (CN is ignored)
+#   * extendedKeyUsage = serverAuth
+#   * RSA >= 2048 bits or ECDSA P-256/384, SHA-256+ signatures
+# The CA cert is the user-installable trust anchor; install ca.crt on iOS
+# (Settings -> General -> VPN & Device Management) and enable full trust
+# under Settings -> General -> About -> Certificate Trust Settings.
+#
+set -euo pipefail
 
-KEY_FILE={{base_path}}/containers/nginx-data/certs/nginx-selfsigned.key
-CRT_FILE={{base_path}}/containers/nginx-data/certs/nginx-selfsigned.crt
+CERT_DIR="{{ base_path }}/containers/nginx-data/certs"
+FQDN="{{ vaultwarden_fqdn }}"
+SHORT_HOST="{{ ansible_nodename }}"
+IP_ADDR="{{ ansible_default_ipv4.address }}"
 
-cat /usr/lib/ssl/openssl.cnf > /tmp/openssl.cnf
-echo '[SAN]\nsubjectAltName=DNS:{{ ansible_nodename }},IP:{{ ansible_default_ipv4.address }}\nbasicConstraints=CA:TRUE,pathlen:0' >> /tmp/openssl.cnf
+CA_KEY="${CERT_DIR}/ca.key"
+CA_CRT="${CERT_DIR}/ca.crt"
+SRV_KEY="${CERT_DIR}/nginx-selfsigned.key"
+SRV_CSR="${CERT_DIR}/nginx-selfsigned.csr"
+SRV_CRT="${CERT_DIR}/nginx-selfsigned.crt"
+SRV_FULLCHAIN="${CERT_DIR}/nginx-fullchain.crt"
 
-SUBJECT="{{ cert_detail }}"
+OPENSSL_CNF="$(mktemp)"
+trap 'rm -f "${OPENSSL_CNF}" "${SRV_CSR}"' EXIT
 
-openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-	-keyout $KEY_FILE -out $CRT_FILE \
-	-reqexts SAN -extensions SAN -config /tmp/openssl.cnf \
-	-subj "$SUBJECT"
+# Belt-and-braces: never let any openssl invocation here block on a tty.
+# OpenSSL 3.x can interactively prompt under conditions that the docs don't
+# fully enumerate (key format autodetect quirks, missing config entries).
+# Run the whole script with stdin closed so any prompt fails fast.
+exec </dev/null
+
+cat > "${OPENSSL_CNF}" <<EOF
+[ req ]
+default_bits        = 2048
+default_md          = sha256
+prompt              = no
+distinguished_name  = dn
+# Note: deliberately no req_extensions here. The CSR only needs the subject DN.
+# Extensions (SAN, EKU, basicConstraints, AKI/SKI) are injected at the signing
+# step via `openssl x509 -req -extensions v3_server`. Putting AKI in the CSR
+# fails on OpenSSL 3.x with "no issuer certificate" because there is no
+# signer in scope when the CSR itself is created.
+
+[ dn ]
+C  = IN
+ST = West Bengal
+L  = Kolkata
+O  = Home, Inc.
+OU = Vaultwarden
+CN = ${FQDN}
+
+[ v3_ca ]
+basicConstraints       = critical, CA:TRUE, pathlen:0
+keyUsage               = critical, keyCertSign, cRLSign
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid:always, issuer
+
+[ v3_server ]
+basicConstraints       = critical, CA:FALSE
+keyUsage               = critical, digitalSignature, keyEncipherment
+extendedKeyUsage       = serverAuth
+subjectKeyIdentifier   = hash
+authorityKeyIdentifier = keyid, issuer
+subjectAltName         = @alt_names
+
+[ alt_names ]
+DNS.1 = ${FQDN}
+DNS.2 = ${SHORT_HOST}
+IP.1  = ${IP_ADDR}
+EOF
+
+umask 077
+
+if [ ! -f "${CA_KEY}" ] || [ ! -f "${CA_CRT}" ]; then
+  echo "==> Generating Root CA (4096-bit RSA, 10y)"
+  openssl genrsa -out "${CA_KEY}" 4096
+  openssl req -x509 -new -nodes \
+    -key "${CA_KEY}" \
+    -sha256 -days 3650 \
+    -subj "/C=IN/ST=West Bengal/L=Kolkata/O=Home, Inc./OU=Vaultwarden Root CA/CN=Vaultwarden Local Root CA" \
+    -extensions v3_ca -config "${OPENSSL_CNF}" \
+    -out "${CA_CRT}"
+fi
+
+echo "==> Generating leaf server cert (2048-bit RSA, 398d, SAN=${FQDN},${SHORT_HOST},${IP_ADDR})"
+openssl genrsa -out "${SRV_KEY}" 2048
+openssl req -new \
+  -key "${SRV_KEY}" \
+  -config "${OPENSSL_CNF}" \
+  -out "${SRV_CSR}"
+
+openssl x509 -req \
+  -in "${SRV_CSR}" \
+  -CA "${CA_CRT}" -CAkey "${CA_KEY}" -CAcreateserial \
+  -passin pass: \
+  -days 398 -sha256 \
+  -extensions v3_server -extfile "${OPENSSL_CNF}" \
+  -out "${SRV_CRT}"
+
+cat "${SRV_CRT}" "${CA_CRT}" > "${SRV_FULLCHAIN}"
+
+chmod 600 "${CA_KEY}" "${SRV_KEY}"
+chmod 644 "${CA_CRT}" "${SRV_CRT}" "${SRV_FULLCHAIN}"
+
+echo "==> Done. CA at ${CA_CRT}, server cert at ${SRV_CRT}"

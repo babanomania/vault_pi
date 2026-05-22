@@ -1,21 +1,18 @@
 ---
-- name: Tear down existing containers services
+# Single canonical restart for the docker compose stack. The previous version
+# of this file did `state: absent` then two up calls in a row, which churned
+# images for no benefit. `docker compose up -d` is idempotent and recreates
+# only containers whose config or image changed.
+- name: Recreate containers from current compose file
   community.docker.docker_compose_v2:
     project_src: "{{ base_path }}/containers"
-    state: absent
-  listen: docker restart
-
-- name: Create and start containers services
-  community.docker.docker_compose_v2:
-    project_src: "{{ base_path }}/containers"
-  listen: docker restart
-
-- name: Run `docker-compose up` for containers
-  community.docker.docker_compose_v2:
-    project_src: "{{ base_path }}/containers"
-    build: never
+    state: present
+    recreate: auto
+    pull: missing
   listen: docker restart
 
 - name: Remove generate-certificate.sh
-  command: "rm {{ base_path }}/generate-certificate.sh"
+  ansible.builtin.file:
+    path: "{{ base_path }}/generate-certificate.sh"
+    state: absent
   listen: remove generate-certificate

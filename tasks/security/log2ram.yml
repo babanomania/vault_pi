@@ -1,25 +1,30 @@
 ---
+- name: Ensure /etc/apt/keyrings exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Download azlux apt signing key
+  ansible.builtin.get_url:
+    url: https://azlux.fr/repo.gpg
+    dest: /etc/apt/keyrings/{{ apt_keyring_file }}
+    mode: '0644'
+    owner: root
+    group: root
+  register: dl_key
+
 - name: "Add /etc/apt/sources.list.d/{{ apt_sources_file }}"
   copy:
-    content: "deb http://packages.azlux.fr/debian/ {{ ansible_facts['distribution_release'] }} main\n"
+    content: "deb [signed-by=/etc/apt/keyrings/{{ apt_keyring_file }}] http://packages.azlux.fr/debian/ {{ ansible_facts['distribution_release'] }} main\n"
     dest: /etc/apt/sources.list.d/{{ apt_sources_file }}
-    mode: 0644
+    mode: '0644'
     owner: root
   register: source_list
 
-- name: Import apt key
-  apt_key:
-    url: https://azlux.fr/repo.gpg.key
-    id: 98B824A5FA7D3A10FDB225B7CA548A0A0312D8E6
-    keyring: /etc/apt/trusted.gpg.d/{{ apt_keyring_file }}
-  register: dl_key
-
-- name: Remove tilde backup file {{ apt_keyring_file }}~
-  file:
-    path: /etc/apt/trusted.gpg.d/{{ apt_keyring_file }}~
-    state: absent
-
-- name: update apt cache
+- name: Update apt cache
   apt:
     update_cache: true
   when: dl_key is changed or source_list is changed
@@ -31,7 +36,7 @@
   register: pkg
   notify: Restart log2ram
 
-- name: Set config options
+- name: Set log2ram config options
   lineinfile:
     path: /etc/log2ram.conf
     regexp: "{{ item.regexp }}"

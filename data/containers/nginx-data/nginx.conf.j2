@@ -1,0 +1,107 @@
+# HTTP -> HTTPS redirect
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name {{ vaultwarden_fqdn }} {{ ansible_nodename }} _;
+    return 301 https://{{ vaultwarden_fqdn }}$request_uri;
+}
+
+# Map for WebSocket upgrade
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    http2 on;
+
+    server_name {{ vaultwarden_fqdn }} {{ ansible_nodename }};
+
+{% if tls_provider | default('self_signed') == 'tailscale' %}
+    # Tailscale-issued Let's Encrypt cert (publicly trusted, accepted by
+    # Bitwarden iOS app — bypasses Apple's "user-installed CA" restriction).
+    ssl_certificate     /etc/nginx/conf.d/certs/tailscale.crt;
+    ssl_certificate_key /etc/nginx/conf.d/certs/tailscale.key;
+{% else %}
+    # Self-signed Root CA + leaf. Works in browsers + most apps once the CA
+    # is installed in the iOS profile and trust-flipped, but the Bitwarden
+    # iOS native app rejects user-installed CAs (errSSLNoRootCert).
+    ssl_certificate     /etc/nginx/conf.d/certs/nginx-fullchain.crt;
+    ssl_certificate_key /etc/nginx/conf.d/certs/nginx-selfsigned.key;
+{% endif %}
+
+    # Modern TLS only (iOS 13+ requires TLS 1.2+ for self-signed)
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # HSTS (only meaningful once the CA is trusted on the client)
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "same-origin" always;
+
+    client_max_body_size 525M;
+
+    location / {
+        proxy_pass http://vaultwarden:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_read_timeout 90;
+    }
+
+    # /api/config is the endpoint the Bitwarden mobile clients hit BEFORE the
+    # login token exchange. Newer iOS app versions hard-reject any server
+    # whose `server.name` field is not "Bitwarden" (the error reads
+    # "This is not a recognised Bitwarden server"). Rewrite the JSON on the
+    # fly so the app sees us as a Bitwarden server. We also normalise the
+    # advertised gitHash to a non-suspicious value.
+    location = /api/config {
+        proxy_pass http://vaultwarden:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Accept-Encoding "";    # disable upstream gzip so sub_filter can match
+        proxy_http_version 1.1;
+
+        sub_filter_types application/json;
+        sub_filter_once off;
+        sub_filter '"name":"Vaultwarden"' '"name":"Bitwarden"';
+        sub_filter '"url":"https://github.com/dani-garcia/vaultwarden"' '"url":"https://bitwarden.com"';
+    }
+
+    # Vaultwarden notifications WebSocket
+    # Vaultwarden 1.32+ serves WebSockets on the main Rocket port (80),
+    # not the legacy 3012. Proxy /notifications/hub to :80 — same as the
+    # rest of the API.
+    location /notifications/hub {
+        proxy_pass http://vaultwarden:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_read_timeout 1d;
+    }
+
+    location /notifications/hub/negotiate {
+        proxy_pass http://vaultwarden:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

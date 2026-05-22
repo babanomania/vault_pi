@@ -1,0 +1,64 @@
+services:
+  vaultwarden:
+    # Pin the Vaultwarden version explicitly. The :latest tag's API/JSON
+    # shape can shift between releases, which would break our nginx
+    # sub_filter for the Bitwarden mobile compatibility rewrite. Bump
+    # this manually after testing.
+    image: vaultwarden/server:{{ vaultwarden_version | default('1.36.0') }}
+    container_name: vaultwarden
+    restart: unless-stopped
+    environment:
+      - DOMAIN=https://{{ vaultwarden_fqdn }}
+      - WEBSOCKET_ENABLED=true
+      - SIGNUPS_ALLOWED={{ vaultwarden_signups_allowed | default('false') }}
+      - ROCKET_PORT=80
+      - WEBSOCKET_PORT=3012
+      - TZ={{ system_timezone | default('UTC') }}
+{% if vaultwarden_admin_token | default('') | length > 0 %}
+      # ADMIN_TOKEN gates the /admin panel. Set in config.yml as an Argon2
+      # hash — see README for how to generate one with
+      # `vaultwarden hash <password>` or a one-off docker run.
+      - ADMIN_TOKEN={{ vaultwarden_admin_token }}
+{% endif %}
+    volumes:
+      - ./vw-data:/data
+    networks:
+      - vault_net
+    healthcheck:
+      test: ["CMD", "/vaultwarden", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    depends_on:
+      - vaultwarden
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx-data:/etc/nginx/conf.d:ro
+    networks:
+      - vault_net
+
+  # nickfedor/watchtower is the actively maintained fork of containrrr/watchtower.
+  # The original upstream image bundles a Docker client too old (API 1.25) for
+  # current Docker engines (need >= 1.40), which causes a restart loop.
+  watchtower:
+    image: nickfedor/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_SCHEDULE=0 0 4 * * *   # daily 04:00
+      - WATCHTOWER_LABEL_ENABLE=false
+      - TZ={{ system_timezone | default('UTC') }}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+networks:
+  vault_net:
+    driver: bridge

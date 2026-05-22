@@ -1,0 +1,111 @@
+---
+# Install Tailscale and join the Pi to the user's tailnet.
+#
+# Rationale: the Bitwarden iOS app does not trust user-installed CA roots
+# (errSSLNoRootCert / NSURLErrorDomain -1202). A self-signed cert can never
+# be made to work with the official app. Tailscale issues a real Let's
+# Encrypt cert for *.ts.net hostnames that iOS trusts out of the box, so
+# we pivot the deployment behind a tailnet.
+#
+# Requires `tailscale_authkey` set in config.yml for unattended setup.
+# Generate one at https://login.tailscale.com/admin/settings/keys
+# (single-use, 24h is plenty since this only runs once per Pi).
+
+- name: Ensure /etc/apt/keyrings exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download Tailscale apt signing key
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_facts['distribution_release'] }}.noarmor.gpg"
+    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    mode: '0644'
+
+- name: Add Tailscale apt repo
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/debian/{{ ansible_facts['distribution_release'] }}.tailscale-keyring.list"
+    dest: /etc/apt/sources.list.d/tailscale.list
+    mode: '0644'
+  register: tailscale_repo
+
+- name: Refresh apt cache after adding Tailscale repo
+  apt:
+    update_cache: true
+  when: tailscale_repo is changed
+
+- name: Install tailscale
+  apt:
+    name: tailscale
+    state: present
+  retries: 3
+  delay: 15
+
+- name: Ensure tailscaled is enabled and running
+  systemd:
+    name: tailscaled
+    state: started
+    enabled: true
+
+- name: Check current Tailscale auth state
+  command: tailscale status --json
+  register: ts_status
+  changed_when: false
+  failed_when: false
+
+- name: Decode Tailscale status
+  set_fact:
+    ts_state: "{{ (ts_status.stdout | from_json) if (ts_status.rc == 0 and ts_status.stdout) else {} }}"
+
+- name: Determine whether the Pi is already on the tailnet
+  set_fact:
+    ts_authenticated: "{{ ts_state.get('BackendState') == 'Running' and ts_state.get('Self', {}).get('Online', false) }}"
+
+- name: Fail fast if tailscale_authkey is missing and Pi is not yet authenticated
+  fail:
+    msg: |
+      Pi is not on the tailnet yet, and tailscale_authkey is empty in config.yml.
+      Generate a one-time key at https://login.tailscale.com/admin/settings/keys
+      (Reusable: off, Ephemeral: off, 24h expiry) and paste into config.yml as
+      tailscale_authkey, then re-run.
+  when:
+    - not ts_authenticated
+    - (tailscale_authkey | default('')) | length == 0
+
+- name: Authenticate Pi into the tailnet
+  command: >-
+    tailscale up
+      --authkey={{ tailscale_authkey }}
+      --hostname={{ tailscale_hostname | default('vaultwarden') }}
+      --ssh=false
+      --accept-routes=false
+  when: not ts_authenticated
+  no_log: true  # don't leak the auth key in logs
+
+- name: Re-read Tailscale status after auth
+  command: tailscale status --json
+  register: ts_status_after
+  changed_when: false
+
+- name: Record the tailnet FQDN as a fact
+  set_fact:
+    tailnet_fqdn: "{{ (ts_status_after.stdout | from_json).Self.DNSName | regex_replace('\\.$', '') }}"
+    tailnet_ip: "{{ (ts_status_after.stdout | from_json).Self.TailscaleIPs[0] }}"
+
+- name: Show tailnet identity
+  debug:
+    msg:
+      - "Pi joined tailnet as {{ tailnet_fqdn }} ({{ tailnet_ip }})"
+      - "Make sure HTTPS Certificates is enabled at https://login.tailscale.com/admin/dns"
+      - "before the cert fetch step runs."
+
+- name: Sanity-check that the configured vaultwarden_fqdn matches the tailnet
+  fail:
+    msg: |
+      vaultwarden_fqdn in config.yml is "{{ vaultwarden_fqdn }}" but the Pi's
+      actual tailnet FQDN is "{{ tailnet_fqdn }}". Update vaultwarden_fqdn to
+      match, or set tls_provider to self_signed.
+  when:
+    - tls_provider | default('self_signed') == 'tailscale'
+    - vaultwarden_fqdn != tailnet_fqdn

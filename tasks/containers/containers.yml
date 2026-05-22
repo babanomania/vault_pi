@@ -1,22 +1,19 @@
 ---
-- name: Ensure docker-compose.yml for containers is present
+- name: Ensure containers directory exists
   become: true
   become_user: "{{ ansible_user }}"
-  synchronize:
-    src: data/containers
-    dest: "{{ base_path }}"
-  notify: docker restart
+  file:
+    path: "{{ base_path }}/containers"
+    state: directory
+    mode: '0755'
 
-- name: Check if nginx certificate exists
-  stat:
-    path: "{{ base_path }}/containers/nginx-data/certs/nginx-selfsigned.key"
-  register: certificate
-
-- name: Ensure openssl is at the present
-  apt:
-    name: openssl
-    state: present
-  when: certificate.stat.exists == False
+- name: Ensure nginx-data directory exists
+  become: true
+  become_user: "{{ ansible_user }}"
+  file:
+    path: "{{ base_path }}/containers/nginx-data"
+    state: directory
+    mode: '0755'
 
 - name: Ensure nginx certificate directory exists
   become: true
@@ -24,35 +21,142 @@
   file:
     path: "{{ base_path }}/containers/nginx-data/certs"
     state: directory
-  when: certificate.stat.exists == False
+    mode: '0700'
 
-- name: Copy certificate script
+- name: Render docker-compose.yml
+  become: true
+  become_user: "{{ ansible_user }}"
+  template:
+    src: data/containers/docker-compose.yml.j2
+    dest: "{{ base_path }}/containers/docker-compose.yml"
+    mode: '0644'
+  notify: docker restart
+
+- name: Render nginx.conf
+  become: true
+  become_user: "{{ ansible_user }}"
+  template:
+    src: data/containers/nginx-data/nginx.conf.j2
+    dest: "{{ base_path }}/containers/nginx-data/nginx.conf"
+    mode: '0644'
+  notify: docker restart
+
+# ---------------------------------------------------------------------------
+# TLS certificate provisioning. Two backends, gated by tls_provider.
+# ---------------------------------------------------------------------------
+
+#                   --- Tailscale (Let's Encrypt) path ---
+
+- name: "TLS [tailscale]: fetch / refresh Let's Encrypt cert via Tailscale"
+  command: >-
+    tailscale cert
+      --cert-file={{ base_path }}/containers/nginx-data/certs/tailscale.crt
+      --key-file={{ base_path }}/containers/nginx-data/certs/tailscale.key
+      {{ vaultwarden_fqdn }}
+  args:
+    creates: "{{ base_path }}/containers/nginx-data/certs/tailscale.crt"
+  when: tls_provider | default('self_signed') == 'tailscale'
+  notify: docker restart
+
+- name: "TLS [tailscale]: ensure cert files are owned by the runtime user"
+  file:
+    path: "{{ base_path }}/containers/nginx-data/certs/{{ item }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "{{ '0600' if item.endswith('.key') else '0644' }}"
+  loop:
+    - tailscale.crt
+    - tailscale.key
+  when: tls_provider | default('self_signed') == 'tailscale'
+
+- name: "TLS [tailscale]: install renewal cron (Let's Encrypt leaf is 90 days)"
+  copy:
+    dest: /etc/cron.d/vaultwarden-tailscale-cert
+    mode: '0644'
+    content: |
+      # Renew the Tailscale-issued Let's Encrypt cert for Vaultwarden.
+      # tailscale cert is idempotent — only re-fetches when within 14 days
+      # of expiry. Run weekly; reload nginx if the cert changed.
+      MAILTO=""
+      SHELL=/bin/bash
+      PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      0 4 * * 1 root /usr/bin/tailscale cert --cert-file={{ base_path }}/containers/nginx-data/certs/tailscale.crt --key-file={{ base_path }}/containers/nginx-data/certs/tailscale.key {{ vaultwarden_fqdn }} && chown {{ ansible_user }}:{{ ansible_user }} {{ base_path }}/containers/nginx-data/certs/tailscale.crt {{ base_path }}/containers/nginx-data/certs/tailscale.key && /usr/bin/docker exec nginx nginx -s reload >/dev/null 2>&1 || true
+  when: tls_provider | default('self_signed') == 'tailscale'
+
+#                   --- Self-signed (Root CA + leaf) path ---
+
+- name: "TLS [self_signed]: ensure openssl is present"
+  apt:
+    name: openssl
+    state: present
+  when: tls_provider | default('self_signed') == 'self_signed'
+
+- name: "TLS [self_signed]: check if leaf certificate exists"
+  stat:
+    path: "{{ base_path }}/containers/nginx-data/certs/nginx-selfsigned.crt"
+  register: leaf_cert
+  when: tls_provider | default('self_signed') == 'self_signed'
+
+- name: "TLS [self_signed]: read leaf certificate notAfter (if present)"
+  become: true
+  become_user: "{{ ansible_user }}"
+  command: openssl x509 -in {{ base_path }}/containers/nginx-data/certs/nginx-selfsigned.crt -noout -enddate
+  register: leaf_enddate
+  changed_when: false
+  failed_when: false
+  when:
+    - tls_provider | default('self_signed') == 'self_signed'
+    - leaf_cert.stat.exists | default(false)
+
+- name: "TLS [self_signed]: decide whether to (re)generate certificates"
+  set_fact:
+    regenerate_cert: "{{ (not leaf_cert.stat.exists | default(false)) or (leaf_enddate.rc | default(1) != 0) or (force_cert_regen | default(false)) }}"
+  when: tls_provider | default('self_signed') == 'self_signed'
+
+- name: "TLS [self_signed]: render certificate generation script"
   become: true
   become_user: "{{ ansible_user }}"
   template:
     src: data/generate-certificate.sh.j2
     dest: "{{ base_path }}/generate-certificate.sh"
-    mode: u=rwx
-  notify: remove generate-certificate
-  when: certificate.stat.exists == False
+    mode: '0700'
+  when:
+    - tls_provider | default('self_signed') == 'self_signed'
+    - regenerate_cert | default(false)
 
-- name: Generate nginx certificate
+- name: "TLS [self_signed]: generate Root CA + leaf certificate"
   become: true
   become_user: "{{ ansible_user }}"
-  command: "sh {{ base_path  }}/generate-certificate.sh"
-  when: certificate.stat.exists == False
-#
-# - name: Generate nginx certificate
-#   become: true
-#   become_user: "{{ ansible_user }}"
-#   command: |
-#     openssl
-#       req -x509 -nodes -days 3650
-#       -newkey rsa:2048
-#       -keyout {{base_path}}/containers/nginx-data/certs/nginx-selfsigned.key
-#       -out {{base_path}}/containers/nginx-data/certs/nginx-selfsigned.crt
-#       -reqexts SAN
-#       -extensions SAN
-#       -config <(cat /usr/lib/ssl/openssl.cnf <(printf '[SAN]\nsubjectAltName=DNS:{{ ansible_nodename }},IP:{{ ansible_default_ipv4.address }}\nbasicConstraints=CA:TRUE,pathlen:0'))
-#       -subj "{{ cert_detail }}"
-#   when: certificate.stat.exists == False
+  command: "bash {{ base_path }}/generate-certificate.sh"
+  when:
+    - tls_provider | default('self_signed') == 'self_signed'
+    - regenerate_cert | default(false)
+  notify:
+    - docker restart
+    - remove generate-certificate
+
+- name: "TLS [self_signed]: fetch ca.crt back to control host for iOS installation"
+  become: true
+  become_user: "{{ ansible_user }}"
+  fetch:
+    src: "{{ base_path }}/containers/nginx-data/certs/ca.crt"
+    dest: "./ca.crt"
+    flat: yes
+  when: tls_provider | default('self_signed') == 'self_signed'
+
+- name: Show next steps
+  debug:
+    msg: "{{ next_steps_tailscale if tls_provider | default('self_signed') == 'tailscale' else next_steps_self_signed }}"
+  vars:
+    next_steps_tailscale:
+      - "==> Vaultwarden is up at https://{{ vaultwarden_fqdn }}"
+      - "    On iPhone: install Tailscale app, sign in to same tailnet, connect."
+      - "    In Bitwarden app: server URL = https://{{ vaultwarden_fqdn }}"
+      - "    iOS will accept the Let's Encrypt cert natively (no profile needed)."
+    next_steps_self_signed:
+      - "==> ca.crt fetched to ./ca.crt on the control host."
+      - "    1. AirDrop / email ./ca.crt to your iPhone."
+      - "    2. iOS: Settings > General > VPN & Device Management -> install."
+      - "    3. Settings > General > About > Certificate Trust Settings -> enable full trust."
+      - "    4. Bitwarden web vault works; Bitwarden iOS NATIVE app will NOT work"
+      - "       (Apple URLSession refuses user-installed CAs in security-sensitive apps)."

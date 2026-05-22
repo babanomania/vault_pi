@@ -2,4 +2,4 @@
 collections:
   - ansible.posix
   - community.general
-  - docker.compose          # Add Docker Compose v2 collection
+  - community.docker
