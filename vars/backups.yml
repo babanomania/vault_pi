@@ -1,17 +1,21 @@
 ---
+# Schedules for the dockerised backup-runner. Paths no longer matter on
+# the host — the borg repo lives in a named Docker volume (`borg_repo`)
+# and the runner reads vw-data via a read-only bind mount.
+
 backup:
-  scripts_path: backup_sync
-  repository: backup_sync/borgrepo
-  source: containers/vw-data
   schedule:
     description: every saturday at 23:00
     minute: 0
     hour: 23
-    weekday: 5
+    weekday: 6   # Saturday in cron (0 or 7 = Sunday; weekday=6 = Sat)
 sync:
-  dropbox_path: vaultwarden_backups
   schedule:
     description: every sunday at 23:00
     minute: 0
     hour: 23
-    weekday: 6
+    weekday: 0   # Sunday
+
+# Folder name on the cloud remote. The backup-runner's DROPBOX_PATH env
+# var ties to this; rclone reads from `remote:<sync_dropbox_path>`.
+sync_dropbox_path: vaultwarden_backups

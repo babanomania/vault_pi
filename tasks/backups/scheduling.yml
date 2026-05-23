@@ -1,43 +1,91 @@
 ---
-- name: Check if backup_sync directory exists
-  stat:
-    path: "{{ base_path }}/{{ backup.scripts_path }}"
-  register: backup_sync
+# Backup orchestration: ship the runner image source to the Pi, build it,
+# wire host cron to invoke it. No host-side borg / rclone / curl needed;
+# everything runs inside the container with secrets mounted from
+# /etc/vault_pi_secrets/.
 
-- name: Create backup directory
+- name: Ship backup-runner image context to the Pi
   become: true
   become_user: "{{ ansible_user }}"
-  file:
-    path: "{{ base_path }}/{{ backup.scripts_path }}"
-    state: directory
-  when: backup_sync.stat.exists == False
+  ansible.posix.synchronize:
+    src: data/backup-runner/
+    dest: "{{ base_path }}/containers/backup-runner/"
+    delete: yes
+    recursive: yes
+  register: runner_src
 
-- name: Ensure backup script is present
+- name: Build backup-runner image
   become: true
   become_user: "{{ ansible_user }}"
-  template:
-    src: data/backup_sync/do_backup.sh.j2
-    dest: "{{ base_path }}/{{ backup.scripts_path }}/do_backup.sh"
-    mode: u=rw,g=rx,o=rx
-  notify: "schedule backup"
+  ansible.builtin.command:
+    cmd: docker compose --profile backup build backup-runner
+    chdir: "{{ base_path }}/containers"
+  when: runner_src is changed
+  changed_when: true
 
-- name: Ensure sync script is present
+- name: Ensure backup log file exists and is writable by the runner user
+  ansible.builtin.file:
+    path: /var/log/vault_pi_backup.log
+    state: touch
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0644'
+  changed_when: false   # `touch` always marks changed, suppress
+
+- name: Install system cron entries for backup + sync
+  ansible.builtin.copy:
+    dest: /etc/cron.d/vault_pi_backup
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      # Vaultwarden backup + offsite sync.
+      #
+      # Both commands are idempotent and self-contained — they `docker
+      # compose run --rm` a fresh backup-runner container that reads its
+      # credentials from /run/secrets/* and exits.
+      MAILTO=""
+      SHELL=/bin/bash
+      PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+      # Weekly local backup — {{ backup.schedule.description }}
+      {{ backup.schedule.minute }} {{ backup.schedule.hour }} * * {{ backup.schedule.weekday }} {{ ansible_user }} cd {{ base_path }}/containers && /usr/bin/docker compose --profile backup run --rm backup-runner backup >> /var/log/vault_pi_backup.log 2>&1
+
+      # Weekly offsite sync — {{ sync.schedule.description }}
+      {{ sync.schedule.minute }} {{ sync.schedule.hour }} * * {{ sync.schedule.weekday }} {{ ansible_user }} cd {{ base_path }}/containers && /usr/bin/docker compose --profile backup run --rm backup-runner sync >> /var/log/vault_pi_backup.log 2>&1
+
+- name: Install logrotate policy for backup log
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/vault_pi_backup
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      /var/log/vault_pi_backup.log {
+          weekly
+          rotate 8
+          compress
+          missingok
+          notifempty
+          copytruncate
+      }
+
+# One-shot restore paths. Both flags should be left False after a
+# successful restore, otherwise the playbook would re-pull and overwrite
+# on every run.
+
+- name: Pull borg repo from cloud (only when rclone_restore true)
   become: true
   become_user: "{{ ansible_user }}"
-  template:
-    src: data/backup_sync/do_sync.sh.j2
-    dest: "{{ base_path }}/{{ backup.scripts_path }}/do_sync.sh"
-    mode: u=rw,g=rx,o=rx
-  notify: "schedule sync"
+  ansible.builtin.command:
+    cmd: docker compose --profile backup run --rm backup-runner sync-restore
+    chdir: "{{ base_path }}/containers"
+  when: rclone_restore | default(false)
 
-- name: Ensure alert script is present
+- name: Extract latest borg archive into /restore (only when borg_restore true)
   become: true
   become_user: "{{ ansible_user }}"
-  template:
-    src: data/backup_sync/do_alert.sh.j2
-    dest: "{{ base_path }}/{{ backup.scripts_path }}/do_alert.sh"
-    mode: u=rw,g=rx,o=rx
-  notify:
-    - "schedule backup"
-    - "schedule sync"
-
+  ansible.builtin.command:
+    cmd: docker compose --profile backup run --rm backup-runner restore latest
+    chdir: "{{ base_path }}/containers"
+  when: borg_restore | default(false)

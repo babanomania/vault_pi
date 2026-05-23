@@ -153,14 +153,36 @@ Idempotent. Re-run any time. Watchtower also auto-updates your container images 
 
 ### Backups
 
-To enable encrypted weekly backups to Dropbox:
+Encrypted weekly backups, offsite sync, and Telegram notifications — all running inside a dedicated container with credentials managed as Docker secrets (never embedded in env vars or `docker inspect` output).
+
+To enable:
 
 1. Set `ensure_backup: True` in `config.yml`.
-2. Generate an [rclone Dropbox token](https://rclone.org/dropbox/) and paste into `rclone_token`.
-3. (Optional) Create a Telegram bot and set `telegram_token` + `telegram_chatid` for completion notifications.
-4. Re-run the playbook.
+2. Generate an [rclone Dropbox token](https://rclone.org/dropbox/) (`rclone config` on a workstation) and paste into `rclone_token`. Pick a strong `borg_pass`.
+3. *(Optional)* Create a Telegram bot via [@BotFather](https://t.me/BotFather), set `telegram_token` + `telegram_chatid`. The runner will ping you on every backup + sync, success or failure.
+4. Re-run `ansible-playbook main.yml`.
 
-Backups run weekly via cron, encrypted with `borg_pass`. To restore, set `borg_restore: True` and re-run. (Or restore manually — `borg list` + `borg extract` on the Pi.)
+What the playbook does:
+- Materialises each credential into `/etc/vault_pi_secrets/<name>` (root:root, 0600).
+- Builds an Alpine-based `backup-runner` image (borg + rclone + sqlite + curl) on the Pi.
+- Adds two cron entries in `/etc/cron.d/vault_pi_backup`:
+  - **Saturday 23:00** — `docker compose run --rm backup-runner backup` (SQLite online-backup snapshot, borg create, prune 7d/4w/3m)
+  - **Sunday 23:00** — `docker compose run --rm backup-runner sync` (rclone sync local repo → Dropbox)
+- Logs to `/var/log/vault_pi_backup.log` with weekly rotation.
+
+To restore on a fresh Pi:
+1. Set `rclone_restore: True` and `borg_restore: True` in `config.yml`.
+2. Run the playbook. It'll pull the borg repo back from Dropbox and extract the latest archive into `/restore` inside the container.
+3. Set both flags back to `False` before the next run (otherwise it re-pulls on every playbook run).
+4. Manually copy the restored data back into `vw-data`:
+   ```bash
+   docker compose stop vaultwarden
+   docker cp backup-runner:/restore/snapshot/. /home/pi/containers/vw-data/
+   sudo chown -R pi:pi /home/pi/containers/vw-data
+   docker compose start vaultwarden
+   ```
+
+To run a one-off backup right now: `ssh pi@<pi> 'cd /home/pi/containers && docker compose --profile backup run --rm backup-runner backup'`. The same image supports `backup`, `sync`, `restore [archive]`, `sync-restore`, `list`, `info`, and `shell` for debugging.
 
 ### Certificate renewal
 

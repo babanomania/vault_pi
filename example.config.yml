@@ -5,16 +5,13 @@
 # The custom password for the pi user is in this example "raspberry"
 pi_custom_password: $6$c04cOXDbcDZ$fobZpDfUp1gOfICS9B5MNmzr9BnNL8gzjPBZnfoYLG/VCYSXFChljrMgczA9WI.TdNXIHtSCVKEJ36suDK1s4/
 
-# base location for all application setup
 base_path: /home/pi
 
-# flag to enable/disable backup and sync
+# ---------------------------------------------------------------------------
+# Feature flags
+# ---------------------------------------------------------------------------
 ensure_backup: True
-
-# flag to enable/disable automatic system updates
 ensure_autoupdate: True
-
-# flag to enable/disable e-ink display
 ensure_display: True
 
 # ---------------------------------------------------------------------------
@@ -22,28 +19,18 @@ ensure_display: True
 # ---------------------------------------------------------------------------
 # tls_provider:
 #   tailscale    -> Tailscale-issued Let's Encrypt (REQUIRED for the
-#                   official Bitwarden iOS app to work — Apple's URLSession
+#                   official Bitwarden iOS app — Apple's URLSession
 #                   refuses user-installed CAs in security-sensitive apps).
 #   self_signed  -> Root CA + leaf. Works for browsers and most desktop
-#                   clients once you install the generated ca.crt and trust
-#                   it. Bitwarden iOS native app will NOT work in this mode;
-#                   you'd have to use the web vault in Safari/Brave.
+#                   clients once you install ca.crt and trust it. Bitwarden
+#                   iOS native app will NOT work in this mode.
 tls_provider: tailscale
 
-# When tls_provider == tailscale, this must match the tailnet FQDN that
-# Tailscale assigns to the Pi (e.g. vaultwarden.tailnet-1234.ts.net).
-# When tls_provider == self_signed, use vaultwarden.local or whatever LAN
-# hostname your clients will hit.
 vaultwarden_fqdn: vaultwarden.tailnet-XXXX.ts.net
 
 # ---------------------------------------------------------------------------
 # Tailscale (only used when tls_provider == tailscale)
 # ---------------------------------------------------------------------------
-# Generate one-time auth key:
-#   https://login.tailscale.com/admin/settings/keys
-#   (Reusable: off, Ephemeral: off, 24h expiry)
-# Also flip on HTTPS Certificates at:
-#   https://login.tailscale.com/admin/dns
 tailscale_authkey: "tskey-auth-REPLACE_ME"
 tailscale_hostname: vaultwarden
 
@@ -52,13 +39,12 @@ tailscale_hostname: vaultwarden
 # ---------------------------------------------------------------------------
 vaultwarden_version: "1.36.0"
 
-# Open registration: leave "true" only long enough to create your account,
-# then set "false" and re-run the playbook.
+# Leave "true" only long enough to create your account, then "false".
 vaultwarden_signups_allowed: "true"
 
-# ADMIN_TOKEN for the /admin panel. Generate with:
+# /admin panel passphrase, materialised as a Docker secret. Leave empty
+# to disable /admin entirely. Generate with:
 #   docker run --rm vaultwarden/server hash --preset=owasp5
-# Empty disables /admin entirely (recommended).
 vaultwarden_admin_token: ""
 
 system_timezone: UTC
@@ -67,13 +53,25 @@ force_cert_regen: False
 # ---------------------------------------------------------------------------
 # Backups
 # ---------------------------------------------------------------------------
-borg_pass: notarealpass
-borg_restore: False
+# All credentials below land in /etc/vault_pi_secrets/ (root:root 0600)
+# and are mounted into the backup-runner container as Docker secrets.
+# They never appear in process environment variables or `docker inspect`.
 
+borg_pass: notarealpass
+
+# rclone Dropbox token. Generate via `rclone config` on a workstation
+# (https://rclone.org/dropbox/), then paste the JSON token here.
 rclone_type: dropbox
-rclone_token: '{"access_token":"XXXX","token_type":"Bearer","refresh_token":"YYYY","expiry":"ZZZZ"}'
+rclone_token: '{"access_token":"XXXX","token_type":"bearer","refresh_token":"YYYY","expiry":"ZZZZ"}'
+
+# One-shot restore flags — set True for a single playbook run, then back
+# to False. `rclone_restore` pulls the borg repo from cloud → local.
+# `borg_restore` extracts the latest archive into /restore inside the
+# backup-runner container (you'll then docker-cp it back into vw-data).
+borg_restore: False
 rclone_restore: False
 
+# Telegram bot for backup completion / failure notifications.
 telegram_chatid: 1234
 telegram_token: 1111:AAAA
 

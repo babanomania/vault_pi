@@ -14,16 +14,20 @@ services:
       - ROCKET_PORT=80
       - WEBSOCKET_PORT=3012
       - TZ={{ system_timezone | default('UTC') }}
-{% if vaultwarden_admin_token | default('') | length > 0 %}
-      # ADMIN_TOKEN gates the /admin panel. Set in config.yml as an Argon2
-      # hash — see README for how to generate one with
-      # `vaultwarden hash <password>` or a one-off docker run.
-      - ADMIN_TOKEN={{ vaultwarden_admin_token }}
+{% if (vaultwarden_admin_token | default('')) | length > 0 %}
+      # ADMIN_TOKEN gates the /admin panel. Loaded from a Docker secret
+      # rather than embedded in the environment so it never appears in
+      # `docker inspect` output or process listings.
+      - ADMIN_TOKEN_FILE=/run/secrets/admin_token
 {% endif %}
     volumes:
       - ./vw-data:/data
     networks:
       - vault_net
+{% if (vaultwarden_admin_token | default('')) | length > 0 %}
+    secrets:
+      - admin_token
+{% endif %}
     healthcheck:
       test: ["CMD", "/vaultwarden", "--version"]
       interval: 30s
@@ -59,6 +63,56 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
+{% if ensure_backup | default(false) %}
+  # Backup runner. NOT started by `docker compose up` thanks to the
+  # `backup` profile — only invoked by host cron via
+  # `docker compose run --rm backup-runner <command>`.
+  backup-runner:
+    build:
+      context: ./backup-runner
+    image: vault_pi/backup-runner:latest
+    container_name: backup-runner
+    profiles: ["backup"]
+    environment:
+      - DROPBOX_PATH={{ sync_dropbox_path | default('vaultwarden_backups') }}
+      - TZ={{ system_timezone | default('UTC') }}
+    volumes:
+      # vaultwarden's data dir, read-only (sqlite .backup doesn't need write).
+      - ./vw-data:/data:ro
+      # Persistent borg repo lives in a named volume so it survives compose
+      # recreate. Stored on the SD card; rclone-synced to the cloud remote.
+      - borg_repo:/repo
+    secrets:
+      - borg_passphrase
+      - rclone.conf
+      - telegram_token
+      - telegram_chatid
+{% endif %}
+
 networks:
   vault_net:
     driver: bridge
+
+{% if ensure_backup | default(false) %}
+volumes:
+  borg_repo:
+    driver: local
+{% endif %}
+
+{% if ((vaultwarden_admin_token | default('')) | length > 0) or (ensure_backup | default(false)) %}
+secrets:
+{% if (vaultwarden_admin_token | default('')) | length > 0 %}
+  admin_token:
+    file: /etc/vault_pi_secrets/admin_token
+{% endif %}
+{% if ensure_backup | default(false) %}
+  borg_passphrase:
+    file: /etc/vault_pi_secrets/borg_passphrase
+  rclone.conf:
+    file: /etc/vault_pi_secrets/rclone.conf
+  telegram_token:
+    file: /etc/vault_pi_secrets/telegram_token
+  telegram_chatid:
+    file: /etc/vault_pi_secrets/telegram_chatid
+{% endif %}
+{% endif %}

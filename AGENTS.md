@@ -31,6 +31,24 @@ This is an Ansible playbook that turns a Raspberry Pi into a hardened, self-host
 - Templates use `{{ vaultwarden_fqdn }}` — derived once in `config.yml`. Don't hardcode hostnames.
 - New env vars that contain secrets (`ADMIN_TOKEN`, auth keys) belong in `config.yml` (gitignored), never `example.config.yml`.
 
+## Secret handling
+
+All runtime credentials flow through Docker secrets, never plain env vars or files in user home dirs:
+
+1. **`config.yml`** holds the plaintext value (gitignored).
+2. **`tasks/security/secrets.yml`** materialises it as `/etc/vault_pi_secrets/<name>` (root:root 0600) — `no_log: true` on each task so Ansible doesn't echo the value.
+3. **`docker-compose.yml.j2`** declares top-level `secrets:` with `file:` source pointing at that path, and lists the secret under the consuming service's `secrets:` block.
+4. The container reads from `/run/secrets/<name>` — for processes that only accept env vars (e.g. Vaultwarden's `ADMIN_TOKEN`), use the `<NAME>_FILE` env-var convention if the app supports it (Vaultwarden, postgres, mariadb, redis-stack, etc. all do).
+5. **Never** embed a secret in a CMD/ENTRYPOINT argv or any `environment:` block in compose — it leaks via `docker inspect`.
+
+When adding a new secret:
+- Pick a snake_case name matching the secret filename.
+- Add to `tasks/security/secrets.yml` with `no_log: true` and a `when:` gating it to its feature flag.
+- Add to `docker-compose.yml.j2` under both top-level `secrets:` (with the Jinja conditional) AND the service's `secrets:` list.
+- Plumb into the container via `<NAME>_FILE=/run/secrets/<name>` or directly read the file in scripts.
+
+The backup-runner is the canonical example — borg passphrase, rclone.conf, telegram token+chatid all flow through `/run/secrets/`.
+
 ## Conventions
 
 | Concept | How it's expressed |
@@ -48,14 +66,18 @@ This is an Ansible playbook that turns a Raspberry Pi into a hardened, self-host
 
 - `main.yml` — play orchestration. Add new task imports here.
 - `tasks/pre.yml` — runs before every play. Add things that must precede apt (swap, packagekit mask).
-- `tasks/security/*.yml` — hardening + Tailscale.
+- `tasks/security/*.yml` — hardening + Tailscale + secrets materialisation.
+- `tasks/security/secrets.yml` — writes plaintext from `config.yml` into `/etc/vault_pi_secrets/`. `no_log: true` on every task.
 - `tasks/containers/containers.yml` — TLS provisioning + template rendering. Branches on `tls_provider`.
 - `tasks/containers/docker.yml` — Docker engine + Compose plugin install.
+- `tasks/backups/scheduling.yml` — ships backup-runner image source to Pi, builds it, installs `/etc/cron.d/vault_pi_backup` + logrotate policy. Handles one-shot `borg_restore` / `rclone_restore` flags.
 - `tasks/post.yml` — cleanup + reboot.
 - `handlers/` — restart logic. Triggered via `notify:`.
-- `data/containers/docker-compose.yml.j2` — vaultwarden + nginx + watchtower compose. Templated.
+- `data/containers/docker-compose.yml.j2` — vaultwarden + nginx + watchtower + backup-runner compose. Top-level `secrets:` block is Jinja-conditional to avoid empty YAML.
 - `data/containers/nginx-data/nginx.conf.j2` — TLS, sub_filter, WebSocket. Jinja-branched on `tls_provider`.
 - `data/generate-certificate.sh.j2` — self-signed CA + leaf, executed on the Pi. iOS-compliant flags.
+- `data/backup-runner/` — Alpine-based container image source: `Dockerfile` + `scripts/` (entrypoint dispatcher, backup, sync, restore, sync_restore, notify). Synced to Pi, built via `docker compose build`.
+- `data/secrets/rclone.conf.j2` — full rclone config rendered into the secrets dir (NOT into the runner image — secrets must stay out of images).
 - `config.yml` — user config (gitignored). Source of truth for all runtime variables.
 - `example.config.yml` — template for new deployments. Mirrors structure of `config.yml`, no secrets.
 
