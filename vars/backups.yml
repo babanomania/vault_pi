@@ -16,6 +16,11 @@ sync:
     hour: 23
     weekday: 0   # Sunday
 
-# Folder name on the cloud remote. The backup-runner's DROPBOX_PATH env
-# var ties to this; rclone reads from `remote:<sync_dropbox_path>`.
-sync_dropbox_path: vaultwarden_backups
+# Folder name on the cloud remote (any rclone backend — Dropbox, B2, S3,
+# SFTP, etc.). The backup-runner's REMOTE_PATH env var ties to this;
+# rclone reads from `remote:<sync_remote_path>`.
+#
+# The variable used to be called `sync_dropbox_path`. The template still
+# falls back to the old name for backward compatibility with older
+# config.yml files.
+sync_remote_path: vaultwarden_backups

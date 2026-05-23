@@ -6,7 +6,7 @@ set -eo pipefail
 . /scripts/notify.sh
 trap 'notify "❌ sync FAILED at $(date -u +%Y-%m-%dT%H:%M:%SZ)"' ERR
 
-dest_path="${DROPBOX_PATH:-vaultwarden_backups}"
+dest_path="${REMOTE_PATH:-${DROPBOX_PATH:-vaultwarden_backups}}"
 start=$(date +%s)
 
 echo "==> Syncing ${BORG_REPO} -> remote:${dest_path}"

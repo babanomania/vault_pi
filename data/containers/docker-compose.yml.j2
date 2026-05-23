@@ -74,7 +74,10 @@ services:
     container_name: backup-runner
     profiles: ["backup"]
     environment:
-      - DROPBOX_PATH={{ sync_dropbox_path | default('vaultwarden_backups') }}
+      # Folder name on the rclone remote. Generic across all backends —
+      # Dropbox, B2, S3, SFTP, etc. — even though we kept the historical
+      # default folder name `vaultwarden_backups`.
+      - REMOTE_PATH={{ sync_remote_path | default(sync_dropbox_path | default('vaultwarden_backups')) }}
       - TZ={{ system_timezone | default('UTC') }}
     volumes:
       # vaultwarden's data dir, read-only (sqlite .backup doesn't need write).
